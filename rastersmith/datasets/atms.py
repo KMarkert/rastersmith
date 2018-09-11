@@ -10,6 +10,8 @@ import xarray as xr
 #from scipy import ndimage
 
 from ..core import core
+from ..core import utils
+from ..core import mapping
 
 
 dir = os.path.dirname(os.path.abspath(__file__))
@@ -24,9 +26,6 @@ class Atms(core.Raster):
     def read(cls,infile,ingeo,sensor='atms',crs='4326'):
         cls.crs = {'init':'epsg:{}'.format(crs)}
         cls.sensor= sensor
-
-        df = np.load(os.path.join(dir,'atms_mlc_coeffs.npy'))
-        calFactors = dict(df.item())
 
         trees = ['//All_Data/ATMS-SDR_All/',
                  '//All_Data/ATMS-SDR-GEO_All/'
@@ -64,39 +63,41 @@ class Atms(core.Raster):
 
         dataarr = list(map(lambda x: cls._calibrate(data,gainCal,x),bandIdx))
         dataarr.append(mask)
+
         bandNames.append('mask')
 
-        dataarr = np.moveaxis(np.array(dataarr),0,2)[:,:,:,np.newaxis]
-        dataarr = np.moveaxis(dataarr,2,3)[:,:,:,:,np.newaxis]
-        print(dataarr.shape)
+        dataarr = utils.formatDataarr(dataarr)
+
+        res = utils.meters2dd((lats.mean(),lons.mean()),scale=15000)
+        dataarr,gridmask,newX,newY = mapping.swath2grid(dataarr,lons,lats,resolution=res,method='cubic')
 
         data = None
-
-        cls.gt = None
 
         fileComps = infile.split('_')
         timeComps = fileComps[2][1:] + fileComps[3][1:] + 'UTC'
 
         dt = datetime.datetime.strptime(timeComps,'%Y%m%d%H%M%S%f%Z')
 
-        coords = {'y': range(dataarr.shape[0]),
-                  'x': range(dataarr.shape[1]),
-                  'z': range(dataarr.shape[2]),
-                  'lat':(['y','x'],lats),
-                  'lon':(['y','x'],lons),
+        coords = {'z': range(dataarr.shape[2]),
+                  'lat':newY,
+                  'lon':newX,
                   'band':(bandNames),
                   'time':([np.datetime64(dt)])}
 
-        dims = ('y','x','z','band','time')
+        dims = ('lat','lon','z','band','time')
 
         attrs = {'nativeCrs':nativeCrs,
                  'projStr': projStr,
                  'bandNames':tuple(bandNames),
                  # 'extent':(west,south,east,north),
-                 'date':dt
+                 'date':dt,
+                 'units': 'brightness temperature',
+                 'resolution':res
                  }
 
         ds = xr.DataArray(dataarr,coords=coords,dims=dims,attrs=attrs,name=cls.sensor)
+
+        ds = ds.raster.updateMask(gridmask)
 
         return ds
 
@@ -125,26 +126,28 @@ class Atms(core.Raster):
 
         return BTr
 
-    @classmethod
-    def _mlc(self):
+    @staticmethod
+    def _mlc(dataarr,keys):
+        df = np.load(os.path.join(dir,'atms_mlc_coeffs.npy'))
+        calFactors = dict(df.item())
 
-        keys = list(self.bands.keys())
-
-        Btr = np.moveaxis(np.array(self.bands.values()),0,-1)
+        Btr = dataarr
 
         cal_mlc = np.zeros_like(Btr)
 
         for c in range(len(keys)):
             chnl = keys[c]
-            if chnl not in "mask":
-                tbi = self.calFactors[chnl]['Tbi']
-                preds = self.calFactors[chnl]['predictors']
-                popt = self.calFactors[chnl]['popt']
+            if "mask" not in chnl:
+                tbi = calFactors[chnl]['Tbi']
+                preds = calFactors[chnl]['predictors']
+                popt = calFactors[chnl]['popt']
                 for i in range(cal_mlc.shape[0]):
                     factor = np.zeros(cal_mlc.shape[1])
                     for j in range(popt.size):
-                        Tbij = self.calFactors[keys[j]]['Tbij']
-                        factor = factor + (popt[j]*(Btr[i,:,preds[j]]-Tbij))
-                    cal_mlc[i,:] = tbi + factor
+                        Tbij = calFactors[keys[j]]['Tbij']
+                        factor = factor + (popt[j]*(Btr[i,:,0,preds[j],0]-Tbij))
+                    cal_mlc[i,:,0,c,0] = tbi + factor
+            else:
+                cal_mlc[:,:,0,c,0] = Btr[:,:,0,c,0]
 
         return cal_mlc

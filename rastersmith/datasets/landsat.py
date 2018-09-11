@@ -8,15 +8,14 @@ import xarray as xr
 import math
 
 from ..core import core
+from ..core import utils
 
 
 class Landsat(core.Raster):
-
     def __init__(self):
-        core.Raster.__init__(self,sensor)
+        core.Raster.__init__(self)
 
         return
-
 
     @classmethod
     def read(cls,metaFile,sensor='landsat',crs='4326'):
@@ -72,34 +71,32 @@ class Landsat(core.Raster):
         dataarr = list(map(lambda k: cls._readBand(path,metadata,k),bandValue))
         dataarr.append(mask)
         bandNames.append('mask')
-        dataarr = np.moveaxis(np.array(dataarr),0,2)[:,:,:,np.newaxis]
-        dataarr = np.moveaxis(dataarr,2,3)[:,:,:,:,np.newaxis]
 
-        lons,lats = cls._geoGrid(extent,shape,projStr,wgsBounds=False)
+        dataarr = utils.formatDataarr(dataarr)
+
+        lons,lats = cls.geoGrid(extent,shape,projStr,wgsBounds=False)
 
         date = '{0} {1}{2}'.format(metadata['DATE_ACQUIRED'],metadata['SCENE_CENTER_TIME'][:-3], ' UTC')
         dt = datetime.datetime.strptime(date, '%Y-%m-%d %H:%M:%S.%f %Z')
 
-        coords = {'y': range(dataarr.shape[0]),
-                  'x': range(dataarr.shape[1]),
-                  'z': range(dataarr.shape[2]),
-                  'lat':(['y','x'],lats),
-                  'lon':(['y','x'],lons),
+        coords = {'z': range(dataarr.shape[2]),
+                  'lat':lats[:,0],
+                  'lon':lons[0,:],
                   'band':(bandNames),
                   'time':([np.datetime64(dt)])}
 
-        dims = ('y','x','z','band','time')
+        dims = ('lat','lon','z','band','time')
 
         attrs = {'nativeCrs':{'init':'epsg:6974'},
                  'projStr': projStr,
                  'bandNames':tuple(bandNames),
                  'extent':(west,south,east,north),
-                 'date':dt
+                 'date':dt,
+                 'units': 'reflectance'
                  }
 
-        ds = xr.DataArray(dataarr,coords=coords,dims=dims,attrs=attrs,name=cls.sensor) \
-               .chunk({'x': 1000,'y': 1000})
-
+        ds = xr.DataArray(dataarr,coords=coords,dims=dims,attrs=attrs,name=cls.sensor)
+        
         return ds
 
     @classmethod
@@ -142,7 +139,6 @@ class Landsat(core.Raster):
 
         return out
 
-
     @staticmethod
     def _parseMetadata(metadata):
         with open(metadata,'r') as f:
@@ -158,6 +154,7 @@ class Landsat(core.Raster):
                 clean_output = {key: item.strip('"') for key, item in output.items()}
 
         return clean_output
+
 
     @staticmethod
     def _esunLookup(key,sensor):

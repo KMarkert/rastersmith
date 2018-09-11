@@ -9,8 +9,8 @@ from pyproj import Proj
 from scipy import ndimage
 import xarray as xr
 
-
 from ..core import core
+from ..core import utils
 
 class Arbitrary(core.Raster):
     def __init__(self):
@@ -20,8 +20,8 @@ class Arbitrary(core.Raster):
 
     @classmethod
     def read(cls,infile,yxzAxes=[0,1,None],bandNames=None,time=None,
-             preprocessing=None,preprocessingArgs=None,attrs=None,
-             sensor='raster',crs='4326'):
+             preprocessing=None,preprocessingArgs=None,preprocessingKwargs=None,
+             attrs=None,sensor='raster',crs='4326'):
         cls.crs = {'init':'epsg:{}'.format(crs)}
         cls.sensor= sensor
 
@@ -59,8 +59,7 @@ class Arbitrary(core.Raster):
             dataarr.append(mask)
             bandNames.append('mask')
 
-            dataarr = np.moveaxis(np.array(dataarr),0,2)[:,:,:,np.newaxis]
-            dataarr = np.moveaxis(dataarr,2,3)[:,:,:,:,np.newaxis]
+            dataarr = utils.formatDataarr(dataarr)
 
             west, xres, xskew, north, yskew, yres  = ds.GetGeoTransform()
             east = west + (xDim * xres)
@@ -68,13 +67,17 @@ class Arbitrary(core.Raster):
 
             extent = (west,south,east,north)
 
-            lons,lats = cls._geoGrid(extent,dims,projStr,wgsBounds=proj.is_latlong())
+            lons,lats = cls.geoGrid(extent,dims,projStr,wgsBounds=proj.is_latlong())
 
             if time:
-                dt= datetime.datetime.strptime(time,'%Y-%m-d')
+                if type(time) == str:
+                    dt= datetime.datetime.strptime(time,'%Y-%m-d')
+                elif type(time) == datetime.datetime:
+                    dt = time
+                else:
+                    raise ValueError('Time either needs to be a datetime object or string in format of YYYY-MM-DD')
             else:
                 dt = datetime.datetime(1970,1,1,0,0,0,0)
-
 
         # elif ds.GetDriver().ShortName == 'HDF5':
         #     subdata = ds.GetSubDatasets()
@@ -82,31 +85,27 @@ class Arbitrary(core.Raster):
         else:
             raise NotImplementedError('Input dataset was not able to be read in')
 
-        coords = {'y': range(dataarr.shape[0]),
-                  'x': range(dataarr.shape[1]),
-                  'z': range(dataarr.shape[2]),
-                  'lat':(['y','x'],lats),
-                  'lon':(['y','x'],lons),
+        coords = {'z': range(dataarr.shape[2]),
+                  'lat':lats[:,0],
+                  'lon':lons[0,:],
                   'band':(bandNames),
                   'time':([np.datetime64(dt)])}
 
-        dims = ('y','x','z','band','time')
+        dims = ('lat','lon','z','band','time')
 
         attrs = {'projStr': projStr,
                  'bandNames':tuple(bandNames),
                  'extent':extent,
-                 'date':dt
+                 'date':dt,
+                 'resolution':(yres,xres)
                  }
 
         ds = xr.DataArray(dataarr,coords=coords,dims=dims,attrs=attrs,name=cls.sensor)
 
-        if (dataarr.shape[0] >= 3000) & (dataarr.shape[1] >= 3000):
-            ds = ds.chunk({'y':1000,'x':1000})
-
         return ds
 
     @staticmethod
-    def _readBand(args,func=None,funcArgs=None):
+    def _readBand(args,func=None,funcArgs=None,funcKwargs=None):
 
         ds,bandIdx = args
 
@@ -115,15 +114,15 @@ class Arbitrary(core.Raster):
 
         if func:
             if funcArgs:
-                result = func(var,**funcArgs)
+                result = func(var,*funcArgs)
             else:
-                results = func(var)
+                result = func(var)
         else:
             result = var
 
 
         return result
 
-    def _readSubData(self,):
-
-        return
+    # def _readSubData(self,):
+    #
+    #     return
