@@ -95,7 +95,21 @@ def dd2meters(inPt,scale=0.1):
     return [y_meters,x_meters]
 
 
-def projectRaster(rasterobj, grid,resampleMethod='nearest'):
+def reprojectRaster(rasterobj, grid,resampleMethod='nearest'):
+
+    def _reproject(i):
+        if bandKeys[i] != 'mask':
+            iMethod = resampleMethod
+        else:
+            iMethod = 'nearest'
+        # Regrid data to common grid
+        interp = interpolate.griddata(pts,
+                    arr[:,:,0,i,0].ravel(),
+                    (grid.xx,grid.yy), method=iMethod,
+                 )
+        interp.astype(np.float)[np.where(interp<-1)] = np.nan
+
+        return interp
 
     rasterLons = rasterobj.coords['lon'].values
     rasterLats = rasterobj.coords['lat'].values
@@ -107,13 +121,15 @@ def projectRaster(rasterobj, grid,resampleMethod='nearest'):
 
     idx = np.where(spatialSelect == True)
 
+    filtered = rasterobj.sel(dict(y=idx[0],x=idx[1]))
+
     # Format geolocation coordinates for regridding
     pts = np.zeros((idx[0].size,2))
     pts[:,0] = rasterLons[idx].ravel()
     pts[:,1] = rasterLats[idx].ravel()
 
-    arr = raster.values
-    bandKeys = raster.coords['band']
+    arr = filtered.values
+    bandKeys = filtered.coords['band']
 
     newDims = (grid.dims[0],grid.dims[1],arr.shape[2],arr.shape[3],arr.shape[4])
     print(newDims)
@@ -121,38 +137,49 @@ def projectRaster(rasterobj, grid,resampleMethod='nearest'):
     out = np.full(newDims,np.nan)
     quality = np.ones(grid.dims,dtype=np.bool)
 
-    for i in range(newDims[3]):
-        if bandKeys[i] != 'mask':
-            iMethod = resampleMethod
-        else:
-            iMethod = 'nearest'
-        # Regrid data to common grid
-        interp = interpolate.griddata(pts,
-                    arr[idx[0],idx[1],0,i,0].ravel(),
-                    (grid.xx,grid.yy), method=iMethod,
-                 )
-        interp.astype(np.float)[np.where(interp<-1)] = np.nan
-        out[:,:,0,i,0] = interp
+    results = list(map(_reproject, range(newDims[3])))
 
-        quality = quality & (interp>=0)
+    quality = quality & (results[0]>=0)
 
-    out[:,:,0,-1,0] = out[:,:,0,-1,0].astype(np.bool) & quality
+    results[-1] = results[-1].astype(np.bool) & quality
+
+    dataarr = np.moveaxis(np.array(results),0,2)[:,:,:,np.newaxis]
+    dataarr = np.moveaxis(dataarr,2,3)[:,:,:,:,np.newaxis]
 
     coords = {'y': range(grid.dims[0]),
               'x': range(grid.dims[1]),
               'z': range(arr.shape[2]),
               'lat':(['y','x'],grid.yy),
               'lon':(['y','x'],grid.xx),
-              'band':raster.coords['band'],
-              'time':raster.coords['time']}
+              'band':rasterobj.coords['band'],
+              'time':rasterobj.coords['time']}
 
     dims = ['y','x','z','band','time']
 
-    attrs = raster.attrs
+    attrs = rasterobj.attrs
 
-    outDa = xr.DataArray(out,coords=coords,dims=dims,attrs=attrs,name=raster.name)
+    outDa = xr.DataArray(dataarr,coords=coords,dims=dims,attrs=attrs,name=rasterobj.name)
 
     return outDa
+
+def find_nearest_idx(pt,xx,yy):
+    xval, yval = pt
+
+    # Find closest image index to the x-y coordinate
+    xidx = (np.abs(xx-xval)).argmin()
+    yidx = (np.abs(yy-yval)).argmin()
+
+    # Convert the 1-d index to 2-d
+    ridx = yidx / xx.shape[1]
+    cidx = xidx % xx.shape[1]
+
+    return (cidx,ridx)
+
+def formatDataarr(dataarr):
+    result = np.moveaxis(np.array(dataarr),0,2)[:,:,:,np.newaxis]
+    result = np.moveaxis(result,2,3)[:,:,:,:,np.newaxis]
+
+    return result
 
 
 def test():

@@ -11,9 +11,17 @@ from itertools import groupby
 
 import numpy as np
 import xarray as xr
-# import geopandas as gpd
+import bottleneck as bn
+
 from osgeo import gdal,osr
 from pyproj import Proj, transform
+from PIL import Image, ImageDraw
+
+import matplotlib.pyplot as plt
+import cartopy
+import cartopy.crs as ccrs
+from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
+
 
 from . import utils
 from . import countries
@@ -34,8 +42,8 @@ class Grid(object):
             self.west,self.south,self.east,self.north = region
 
         if '4326' in crs:
-            midPoint = [np.mean([self.north,self.south]),
-                        np.mean([self.east,self.west])]
+            midPoint = [bn.nanmean([self.north,self.south]),
+                        bn.nanmean([self.east,self.west])]
             ySpacing, xSpacing = utils.meters2dd(midPoint,resolution)
 
         elif type(resolution) == list:
@@ -45,69 +53,16 @@ class Grid(object):
         else:
             ySpacing,xSpacing= resolution,resolution
 
-        lons = np.arange(self.west,self.east,xSpacing)
-        lats = np.arange(self.south,self.north,ySpacing)
+        self.lons = np.arange(self.west,self.east,xSpacing)
+        self.lats = np.arange(self.south,self.north,ySpacing)
 
-        self.xx,self.yy = np.meshgrid(lons,lats)
+        self.xx,self.yy = np.meshgrid(self.lons,self.lats)
 
         self.nominalResolution = (xSpacing,ySpacing)
         self.dims = self.xx.shape
 
         return
 
-    def _type(self):
-        return 'grid'
-
-    def mapRaster(self,raster,interpMethod='linear'):
-
-        rasterLons = raster.coords['lon']
-        rasterLats = raster.coords['lat']
-
-
-        xSelect = (rasterLons>self.west) & (rasterLons<self.east)
-        ySelect = (rasterLats>self.south) & (rasterLats<self.north)
-        spatialSelect = ySelect & xSelect
-
-        idx = np.where(spatialSelect == True)
-
-        # Format geolocation coordinates for gridding
-        pts = np.zeros((idx[0].size,2))
-        pts[:,0] = rasterLons[idx].ravel()
-        pts[:,1] = rasterLats[idx].ravel()
-
-        bNames = list(raster.bands.keys())
-
-        qualityBands = np.zeros([self.dims[0],self.dims[1],len(bNames)])
-
-        out = raster.copy()
-
-        for i in range(len(bNames)):
-            if 'mask' in bNames[i]:
-                iMethod = 'nearest'
-            else:
-                iMethod = interpMethod
-
-            # Regrid data to common grid
-            out.bands[bNames[i]] = interpolate.griddata(pts,
-                                     raster.bands[bNames[i]][idx].ravel(),
-                                     (self.xx,self.yy), method=iMethod,
-                                     )
-
-            qualityBands[:,:,i] = (out.bands[bNames[i]] < 16000) & \
-                                  (out.bands[bNames[i]] > -1)
-            if i == 0:
-                interpMask = np.isnan(out.bands[bNames[i]])
-
-        qualityMask = np.min(qualityBands,axis=2).astype(np.bool)
-        out.bands['mask'] = out.bands['mask'] & ~interpMask & qualityMask
-        out.updateMask()
-
-        out.coords['Lon'],out.coords['Lat'] = self.xx,self.yy
-        out.extent = (self.west,self.south,self.east,self.north)
-
-        out.gt = out._getGt(self.north,self.west,self.nominalResolution)
-
-        return out
 
 # @geopandas
 class Geometry(object):
@@ -117,16 +72,49 @@ class Geometry(object):
 
 @xr.register_dataarray_accessor('raster')
 class Raster(object):
-    def __init__(self,sensor=None,crs='4326'):
-        self.sensor = sensor
-        self.crs = {'init':'epsg:{}'.format(crs)}
+    def __init__(self,xarray_obj):
+        self._obj = xarray_obj
 
         return
 
-    # @classmethod
-    # def copy(cls):
-    #     return copy.deepcopy(cls)
+    @property
+    def gt(self):
+        rasterobj = self._obj
+        ulx = float(rasterobj.coords['lon'].min().values)
+        uly = float(rasterobj.coords['lat'].max().values)
 
+        pySize,pxSize = rasterobj.attrs['resolution']
+
+        if pySize > 0:
+            pySize = pySize * -1
+
+        gt = (ulx,pxSize,0,uly,0,pySize)
+
+        return gt
+
+    @staticmethod
+    def geoGrid(extent,dims,nativeProj,wgsBounds=False):
+
+        west, south, east, north = extent
+
+        gcsProj = Proj(init='epsg:4326')
+        native = Proj(nativeProj)
+
+        gcs = native.is_latlong()
+
+        if wgsBounds and ~gcs:
+            llx,lly = transform(gcsProj,native,west,south)
+            urx,ury = transform(gcsProj,native,east,north)
+        else:
+            llx,lly = west,south
+            urx,ury = east,north
+
+        yCoords = np.linspace(lly,ury,dims[0],endpoint=False)[::-1]
+        xCoords = np.linspace(llx,urx,dims[1],endpoint=False)
+
+        xx,yy = np.meshgrid(xCoords,yCoords)
+
+        return xx,yy
 
     @staticmethod
     def _extractBits(image,start,end):
@@ -152,122 +140,48 @@ class Raster(object):
 
 
     @classmethod
-    def _geoGrid(cls,extent,dims,nativeProj,wgsBounds=None):
-
-        west, south, east, north = extent
-
-        gcsProj = Proj(cls.crs)
-        native = Proj(nativeProj)
-
-        gcs = native.is_latlong()
-
-        if wgsBounds and ~gcs:
-            llx,lly = transform(gcsProj,native,west,south)
-            urx,ury = transform(gcsProj,native,east,north)
-        else:
-            llx,lly = west,south
-            urx,ury = east,north
-
-        yCoords = np.linspace(lly,ury,dims[0],endpoint=False)[::-1]
-        xCoords = np.linspace(llx,urx,dims[1],endpoint=False)
-
-        xx,yy = np.meshgrid(xCoords,yCoords)
-
-        if ~gcs:
-            lons,lats = transform(native,gcsProj,xx,yy)
-        else:
-            lons,lats = xx, yy
-
-        return lons,lats
-
-    @classmethod
-    def _getGt(self,north,west,gridSize,projStr=None):
-        if projStr:
-            outProj = Proj(projStr)
-            inProj = Proj(init=self.crs)
-
-            ulx,uly = transform(inProj,outProj,west,north)
-
-        else:
-            ulx,uly = west,north
-
-        if type(gridSize) == list:
-            pxSize = gridSize[0]
-            pySize = gridSize[1]
-        else:
-            pxSize,pySize = gridSize, gridSize
-
-        gt = (ulx,pxSize,0,uly,0,-pySize)
-
-        return gt
-
-    @classmethod
-    def select(self,bandList,newNames=None):
+    def select(cls,bandList,newNames=None):
         if (type(bandList) != list) and (type(bandList) == str):
             bandList = [bandList]
 
-        bandNames = self.raster.coords['band'].values
+        bandNames = cls._obj.coords['band'].values
 
         newBands = [new for new in bandList if any(b in new for b in bandNames)]
 
-        out = self.copy()
+        out = cls._obj.copy()
 
-        out.raster = out.raster.sel(band=newBands)
+        out.raster = out.sel(band=newBands)
 
         if newNames:
-            out.raster.coords['band'] = newNames
+            out.coords['band'] = newNames
 
         return out
 
-    @classmethod
-    def normalizedDifference(cls,band1=None,band2=None,appendTo=None,outBandName='nd'):
-        if (band1 == None) or (band2 == None):
-            raise ValueError('Band1 and Band2 need be defined to calculate normalizedDifference')
-
-        nd = (cls.sel(band=band1) - cls.sel(band=band2)) / \
-             (cls.sel(band=band1)+ cls.sel(band=band2))
-
-        nd = nd.expand_dims('band',2)
-        nd.coords['band'] = [bandName]
-
-        if appendTo != None:
-            result= xr.merge([appendTo, nd],dim='band')
-
-        else:
-            result = nd
-
-        return result
-
-    def gridRaster(self,):
-
-        return
 
     def clip(self,geom):
 
         return
 
-    @classmethod
-    def updateMask(cls,arr):
-        if len(arr.shape) < 3:
-            if len(arr.shape) == 2:
-                arr = arr[:,:,np.newaxis]
-            else:
-                raise ValueError('Update to mask has to be at least 2-dimensional\
-                                  with (y,x) coordinates consitent with DataArray')
+    def updateMask(self,maskDa,applyMask=True):
+        out = self._obj
 
-        cls.sel(band='mask').values = cls.sel(band='mask') & arr
-        out = cls.mask()
+        if type(maskDa) == np.ndarray:
+            yCoords = out.coords['lat'].values
+            xCoords = out.coords['lon'].values
+            maskDa = xr.DataArray(maskDa,coords=[yCoords,xCoords],dims=['lat','lon'])
+
+        out.values[:,:,:,-1,:] = self._obj.sel(band='mask').astype(np.bool)\
+                                            & maskDa.astype(np.bool)
+        if applyMask:
+            out = out.raster.applyMask()
 
         return out
 
-    @classmethod
-    def mask(self):
-        out=self.copy()
-        out.raster = out.raster.where(out.raster.sel(band='mask')==1)
+    def applyMask(self):
+        out= self._obj.where(self._obj.sel(band='mask')>0)
         return out
 
 
-    @classmethod
     def unmask(self,value=None):
         bNames = [i for i in self.bands.keys() if i != 'mask']
         mask = self.bands['mask']
@@ -284,131 +198,70 @@ class Raster(object):
 
         return out
 
-    @staticmethod
-    def writeGeotiff(rasterobj,fileName):
+
+    def showMap(self,band=None,showCountries=True):
+
+        ax = plt.axes(projection=ccrs.PlateCarree())
+
+        if band:
+            raster = self._obj.sel(band=band)
+        else:
+            if 'band' in list(self._obj.coords.keys()):
+                raster = self._obj.isel(band=0)
+            else:
+                raster = self._obj
+
+        raster.plot(ax=ax,robust=True)
+        ax.coastlines()
+
+        ax.add_feature(cartopy.feature.BORDERS)
+
+        gl = ax.gridlines(crs=ccrs.PlateCarree(), draw_labels=True,
+                      linewidth=1, color='gray', alpha=0.5,linestyle=':')
+
+        gl.xlabels_top = False
+        gl.ylabels_right = False
+
+        gl.xformatter = LONGITUDE_FORMATTER
+        gl.yformatter = LATITUDE_FORMATTER
+
+        ax.set_xlabel('')
+        ax.set_ylabel('')
+
+        plt.show()
+
+        return
+
+
+    def writeGeotiff(self,path,prefix):
+        rasterobj = self._obj
         drv = gdal.GetDriverByName('GTiff')
         srs = osr.SpatialReference()
-        srs.ImportFromEPSG(int(rasterobj.raster.crs['init']))
+        srs.ImportFromProj4(rasterobj.attrs['projStr'])
 
-        t = self.date
+        y = len(rasterobj.coords['lat'])
+        x = len(rasterobj.coords['lon'])
+        bands = len(rasterobj.coords['band'])
 
-        outDs = drv.Create(prefix + '_' + t + '.tif',
-                           y,x,bands,
+        t = rasterobj.attrs['date'].strftime("%Y%m%d")
+
+        outDs = drv.Create(path + prefix + '_' + t + '.tif',
+                           x,y,bands,
                            gdal.GDT_Int16
                            )
 
+        flip = rasterobj.attrs['resolution'][0] < 0
+
         for b in range(bands):
             band = outDs.GetRasterBand(b+1)
-            band.WriteArray(tValues[b,:,:])
+            band.WriteArray(rasterobj[:,:,0,b,0].values)
             band.SetNoDataValue(0)
             band = None
 
-        outDs.SetGeoTransform(self.data.attrs['gt'])
+        outDs.SetGeoTransform(rasterobj.raster.gt)
 
         outDs.SetProjection(srs.ExportToWkt())
 
         outDs.FlushCache()
 
         return
-
-
-# @xr.register_dataarray_accessor('collection')
-class Collection(Raster):
-    def __init__(self):
-
-        return
-
-    def _type(self):
-        return 'collection'
-
-    def copy(self):
-        return copy.deepcopy(self)
-
-
-    def writeNetCDF(self,fileName):
-        self.data.to_netcdf(filname)
-        return
-
-
-    def writeGeotiffs(self,folder,prefix='bump_out'):
-
-        nFiles,y,x = self.data.dims.values()
-        dates = self.data.time.values
-
-        drv = gdal.GetDriverByName('GTiff')
-        srs = osr.SpatialReference()
-        srs.ImportFromEPSG(int(gr.crs.split(':')[1]))
-
-
-        for i in range(nFiles):
-            t = str(dates[i]).split('.')[0].replace(':','')
-            print(t)
-            tValues = self.data.isel(time=i).to_array().values
-
-            bands = tValues.shape[0]
-
-            outDs = drv.Create(prefix + '_' + t + '.tif',
-                               y,x,bands,
-                               gdal.GDT_Int16
-                               )
-
-            for b in range(bands):
-                band = outDs.GetRasterBand(b+1)
-                band.WriteArray(tValues[b,:,:])
-                band.SetNoDataValue(0)
-                band = None
-
-            outDs.SetGeoTransform(self.data.attrs['gt'])
-
-            outDs.SetProjection(srs.ExportToWkt())
-
-            outDs.FlushCache()
-
-        return
-
-
-    def filterDate(self,iniTime,endTime):
-        if type(iniTime) != datetime.datetime:
-            iniTime = datetime.datetime.strptime(iniTime,'%Y-%m-%d')
-        if type(endTime) != datetime.datetime:
-            endTime = datetime.datetime.strptime(endTime,'%Y-%m-%d')
-
-        out = self.copy()
-
-        out.data = out.data.sel(time=slice(iniTime, endTime))
-
-        return out
-
-    def filterBounds(self, geom):
-
-        return
-
-    def select(self,bands):
-        out = self.copy()
-
-        out.data = out.data.sel(time=slice(iniTime, endTime))
-
-        return out
-
-    def appendRaster(self,raster):
-
-        return
-
-# @xr.register_dataset_accessor('mc')
-class MultiCollection(Raster):
-    def __init__(self,):
-        return
-
-
-def save(obj,filename):
-    if filename[-5:] != '.rasm':
-        fileName = fileName.split('.')[0]+'.rasm'
-
-    pickle.dump(obj, open( filename, "wb" ) )
-
-    return
-
-def load(filename):
-    obj = pickle.load( open( filename, "rb" ) )
-
-    return obj
