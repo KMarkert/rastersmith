@@ -92,11 +92,14 @@ class Landsat(core.Raster):
                  'bandNames':tuple(bandNames),
                  'extent':(west,south,east,north),
                  'date':dt,
-                 'units': 'reflectance'
+                 'units': 'reflectance',
+                 'scale_factor': 10000,
+                 'add_offset': 0,
+                 'resolution':30
                  }
 
         ds = xr.DataArray(dataarr,coords=coords,dims=dims,attrs=attrs,name=cls.sensor)
-        
+
         return ds
 
     @classmethod
@@ -129,15 +132,18 @@ class Landsat(core.Raster):
         bias = float(metadata[biasKey.format(key)])
 
         rad = ((gain * arr) + bias)
+        rad[np.where(rad<0)] = 0
+
+        print(key,rad.min(),rad.max())
 
         if toa:
             esun = cls._esunLookup(key,metadata['SENSOR_ID'])
-            out = (math.pi * arr * dSun**2) / (esun * math.cos(math.radians(sZenith))) * 10000
+            out = (math.pi * rad * (dSun**2)) / (esun * math.cos(math.radians(sZenith)))
 
         else:
-            out = rad * 10000
+            out = rad
 
-        return out
+        return out * 10000
 
     @staticmethod
     def _parseMetadata(metadata):

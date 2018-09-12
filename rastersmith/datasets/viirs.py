@@ -95,11 +95,12 @@ class Viirs(core.Raster):
                  'date':dt,
                  'units': 'reflectance',
                  'scale_factor': 10000,
-                 'add_offset': 0
+                 'add_offset': 0,
+                 'resolution':500
                  }
 
         ds = xr.DataArray(dataarr,coords=coords,dims=dims,attrs=attrs,name=cls.sensor)
-        
+
         return ds
 
     @staticmethod

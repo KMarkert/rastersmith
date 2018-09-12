@@ -91,7 +91,7 @@ class Atms(core.Raster):
                  'bandNames':tuple(bandNames),
                  # 'extent':(west,south,east,north),
                  'date':dt,
-                 'units': 'brightness temperature',
+                 'units': 'brightness_temperature',
                  'resolution':res
                  }
 
