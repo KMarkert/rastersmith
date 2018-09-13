@@ -22,7 +22,7 @@ pip install -e .
 
 
 ### Using RasterSmith
-Here is a quick example of what you can do with RasterSmith. More detailed on the use of the package is provided in the documentation.
+Here is a quick example of what you can do with RasterSmith. More detailed on the use of the package is provided in the [documentation](https://rastersmith.readthedocs.io/).
 
 To begin, let's import rastersmith in an IPython environment.
 
@@ -33,7 +33,7 @@ In [1]: import rastersmith as rs
 The core strength of RasterSmith is the ability to read in geographic raster data and format it in a way that is internally consistent. For example, we will read in a [gridded VIIRS surface reflectance product](https://earthdata.nasa.gov/earth-observation-data/near-real-time/download-nrt-data/viirs-nrt) from NASA LANCE and explore the RasterSmith data structure.
 
 ```python
-In [2]: viirs = rs.Viirs.read('VNP09GA_NRT.A2018203.h27v07.001.h5')
+In [2]: viirs = rs.Viirs.read('VNP09GA_NRT.A2018247.h27v07.001.h5')
 
 In [3]: viirs
 Out[3]:
@@ -161,7 +161,7 @@ Out[11] <matplotlib.collections.QuadMesh at 0xd1d7b2c88>
 
 As we can see from benchmarking the processing, it takes about 45s to read and process the 8 VIIRS files and create a mean composite from all the data. We also see from the output of image that only clear (non-cloudy) pixels are being used to create the composite making, however, there are a few missing pixels still.
 
-These examples are meant to highlight the use of RasterSmith for reading in, creating a consistent format, and preprocessing of satellite remote sensing products. For more information on the internal data structure and available functions within RasterSmith please see the documentation. 
+These examples are meant to highlight the use of RasterSmith for reading in, creating a consistent format, and preprocessing of satellite remote sensing products. For more information on the internal data structure and available functions within RasterSmith please see the [documentation](https://rastersmith.readthedocs.io/).
 
 ### Why RasterSmith?
 Many satellite data products provided come in different (1) data formats, (2) number of bands, (3) spatial resolution/extent, and (4) geographic projections making the combined use of the data product often difficult to handle and use for non-experts. RasterSmith is used to take the differing data product and make a common format with a set of helper functions for use in analysis.
