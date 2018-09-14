@@ -93,7 +93,7 @@ class Viirs(core.Raster):
                  'bandNames':tuple(bandNames),
                  'extent':(west,south,east,north),
                  'date':dt,
-                 'units': 'reflectance',
+                 'units': 'percent_reflectance',
                  'scale_factor': 10000,
                  'add_offset': 0,
                  'resolution':500

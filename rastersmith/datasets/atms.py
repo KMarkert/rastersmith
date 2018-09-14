@@ -7,7 +7,6 @@ import datetime
 import numpy as np
 from osgeo import gdal
 import xarray as xr
-#from scipy import ndimage
 
 from ..core import core
 from ..core import utils
@@ -71,6 +70,8 @@ class Atms(core.Raster):
         res = utils.meters2dd((lats.mean(),lons.mean()),scale=15000)
         dataarr,gridmask,newX,newY = mapping.swath2grid(dataarr,lons,lats,resolution=res,method='cubic')
 
+        bb = (newX.min(),newY.min(),newX.max(),newY.max())
+
         data = None
 
         fileComps = infile.split('_')
@@ -89,7 +90,7 @@ class Atms(core.Raster):
         attrs = {'nativeCrs':nativeCrs,
                  'projStr': projStr,
                  'bandNames':tuple(bandNames),
-                 # 'extent':(west,south,east,north),
+                 'extent': bb,
                  'date':dt,
                  'units': 'brightness_temperature',
                  'resolution':res

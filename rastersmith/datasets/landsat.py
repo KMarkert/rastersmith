@@ -92,7 +92,7 @@ class Landsat(core.Raster):
                  'bandNames':tuple(bandNames),
                  'extent':(west,south,east,north),
                  'date':dt,
-                 'units': 'reflectance',
+                 'units': 'percent_reflectance',
                  'scale_factor': 10000,
                  'add_offset': 0,
                  'resolution':30
@@ -133,8 +133,6 @@ class Landsat(core.Raster):
 
         rad = ((gain * arr) + bias)
         rad[np.where(rad<0)] = 0
-
-        print(key,rad.min(),rad.max())
 
         if toa:
             esun = cls._esunLookup(key,metadata['SENSOR_ID'])
