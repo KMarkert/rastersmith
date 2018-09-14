@@ -94,73 +94,21 @@ def dd2meters(inPt,scale=0.1):
     # return list of converted resolution values
     return [y_meters,x_meters]
 
+def rasterExpression(expression,lookups,outBandName='bandMath',appendTo=None):
 
-def reprojectRaster(rasterobj, grid,resampleMethod='nearest'):
+    result = eval(expression,lookups)
 
-    def _reproject(i):
-        if bandKeys[i] != 'mask':
-            iMethod = resampleMethod
-        else:
-            iMethod = 'nearest'
-        # Regrid data to common grid
-        interp = interpolate.griddata(pts,
-                    arr[:,:,0,i,0].ravel(),
-                    (grid.xx,grid.yy), method=iMethod,
-                 )
-        interp.astype(np.float)[np.where(interp<-1)] = np.nan
+    result = result.expand_dims('band')
+    result.coords['band'] = [outBandName]
+    result = result.transpose('lat','lon','z','band','time')
 
-        return interp
+    if appendTo:
+        out = xr.concat([appendTo,result],dim='band')
+    else:
+        out = result
 
-    rasterLons = rasterobj.coords['lon'].values
-    rasterLats = rasterobj.coords['lat'].values
+    return out
 
-
-    xSelect = (rasterLons>grid.west) & (rasterLons<grid.east)
-    ySelect = (rasterLats>grid.south) & (rasterLats<grid.north)
-    spatialSelect = ySelect & xSelect
-
-    idx = np.where(spatialSelect == True)
-
-    filtered = rasterobj.sel(dict(y=idx[0],x=idx[1]))
-
-    # Format geolocation coordinates for regridding
-    pts = np.zeros((idx[0].size,2))
-    pts[:,0] = rasterLons[idx].ravel()
-    pts[:,1] = rasterLats[idx].ravel()
-
-    arr = filtered.values
-    bandKeys = filtered.coords['band']
-
-    newDims = (grid.dims[0],grid.dims[1],arr.shape[2],arr.shape[3],arr.shape[4])
-    print(newDims)
-
-    out = np.full(newDims,np.nan)
-    quality = np.ones(grid.dims,dtype=np.bool)
-
-    results = list(map(_reproject, range(newDims[3])))
-
-    quality = quality & (results[0]>=0)
-
-    results[-1] = results[-1].astype(np.bool) & quality
-
-    dataarr = np.moveaxis(np.array(results),0,2)[:,:,:,np.newaxis]
-    dataarr = np.moveaxis(dataarr,2,3)[:,:,:,:,np.newaxis]
-
-    coords = {'y': range(grid.dims[0]),
-              'x': range(grid.dims[1]),
-              'z': range(arr.shape[2]),
-              'lat':(['y','x'],grid.yy),
-              'lon':(['y','x'],grid.xx),
-              'band':rasterobj.coords['band'],
-              'time':rasterobj.coords['time']}
-
-    dims = ['y','x','z','band','time']
-
-    attrs = rasterobj.attrs
-
-    outDa = xr.DataArray(dataarr,coords=coords,dims=dims,attrs=attrs,name=rasterobj.name)
-
-    return outDa
 
 def find_nearest_idx(pt,xx,yy):
     xval, yval = pt
@@ -180,20 +128,3 @@ def formatDataarr(dataarr):
     result = np.moveaxis(result,2,3)[:,:,:,:,np.newaxis]
 
     return result
-
-
-def test():
-    # main level program for testing
-    inPt = [-1,0] # -1 degrees latitude, 0 degrees longitue
-    outMeters = meters2dd(inPt,100)
-    outDD = dd2meters(inPt,1)
-
-    # print results
-    print('Output decimal degrees: {0}\nOutput meters: {1}'.format(outMeters,outDD))
-
-    return
-
-
-# Execute the main level program if run as standalone
-if __name__ == "__main__":
-    test()

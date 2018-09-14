@@ -78,6 +78,8 @@ def coregister(raster,to=None,method='nearest'):
     projX = xr.DataArray(xx,coords={'y':range(xx.shape[0]),'x':range(xx.shape[1])},dims=('y','x'))
     projY = xr.DataArray(yy,coords={'y':range(xx.shape[0]),'x':range(xx.shape[1])},dims=('y','x'))
 
+    rasterSel = raster.sel(dict(lat=slice(yy.max(),yy.min()),lon=slice(xx.min(),xx.max())))
+
     outDa = raster.interp(lat=projY,lon=projX,method=method)
 
     outDa = outDa.drop(['lat','lon'])
@@ -104,7 +106,7 @@ def reproject(raster,outEpsg='4326',outResolution=500,method='nearest'):
         outRes = outResolution
 
     newX = np.arange(xx.min(),xx.max(),outRes[1])
-    newY = np.arange(yy.min(),yy.max(),outRes[0])
+    newY = np.arange(yy.min(),yy.max(),outRes[0])[::-1]
 
     newXGrid, newYGrid = np.meshgrid(newX,newY)
 
@@ -122,7 +124,7 @@ def reproject(raster,outEpsg='4326',outResolution=500,method='nearest'):
 
 # @staticmethod
 def reduceWindow(raster,window=3,reducer='mean',func=None):
-    method = {'mean':np.mean,'std':np.std,'variance':np.var,'sum':np.sum,'unique':np.unique}
+    method = {'mean':bn.nanmean,'std':bn.nanstd,'variance':np.var,'sum':np.sum,'unique':np.unique}
 
     if reducer not in list(method.keys()):
         raise NotImplementedError("Selected reducer is not implemented")

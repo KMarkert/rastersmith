@@ -3,9 +3,7 @@
 from __future__ import division, print_function
 
 #import glob
-import copy
 import math
-import pickle
 import datetime
 from itertools import groupby
 
@@ -162,6 +160,24 @@ class Raster(object):
 
         return
 
+    def normalizedDifference(self,band1=None,band2=None,outBandName='nd',appendTo=None):
+        rasterobj = self._obj
+
+        if band1 and band2:
+            nd = (rasterobj.sel(band=band1) - rasterobj.sel(band=band2)) / \
+                 (rasterobj.sel(band=band1) + rasterobj.sel(band=band2))
+
+            nd = nd.expand_dims('band')
+            nd.coords['band'] = [outBandName]
+            nd = nd.transpose('lat','lon','z','band','time')
+
+        if appendTo:
+            out = xr.concat([appendTo,nd],dim='nd')
+        else:
+            out = nd
+
+        return out
+
     def updateMask(self,maskDa,applyMask=True):
         out = self._obj
 
@@ -199,7 +215,7 @@ class Raster(object):
         return out
 
 
-    def showMap(self,band=None,showCountries=True):
+    def showMap(self,band=None,showCountries=True,cmap='viridis'):
 
         ax = plt.axes(projection=ccrs.PlateCarree())
 
@@ -211,7 +227,7 @@ class Raster(object):
             else:
                 raster = self._obj
 
-        raster.plot(ax=ax,robust=True)
+        raster.plot(ax=ax,robust=True,cmap=cmap)
         ax.coastlines()
 
         ax.add_feature(cartopy.feature.BORDERS)
