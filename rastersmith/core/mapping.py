@@ -95,12 +95,15 @@ def reproject(raster,outEpsg='4326',outResolution=500,method='nearest'):
 
     xGrid, yGrid = np.meshgrid(xCoords,yCoords)
 
-    inproj = Proj(raster.attrs['projStr'])
-    outproj = Proj(init='epsg:{}'.format(outEpsg))
+    if '4326' in str(outEpsg):
+        inproj = Proj(raster.attrs['projStr'])
+        outproj = Proj('+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
+    else:
+        raise NotImplementedError('Curretly only reprojecting to WGS84 is support, future versions will support all reprojections')
 
     xx,yy = transform(inproj,outproj,xGrid,yGrid)
 
-    if '4326' in outEpsg:
+
         outRes = utils.meters2dd((xx.mean(),yy.mean()),outResolution)
     else:
         outRes = outResolution
