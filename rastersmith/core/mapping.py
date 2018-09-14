@@ -103,7 +103,7 @@ def reproject(raster,outEpsg='4326',outResolution=500,method='nearest'):
 
     xx,yy = transform(inproj,outproj,xGrid,yGrid)
 
-
+    if '4326' in str(outEpsg):
         outRes = utils.meters2dd((xx.mean(),yy.mean()),outResolution)
     else:
         outRes = outResolution
