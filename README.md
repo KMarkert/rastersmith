@@ -2,7 +2,7 @@
 RasterSmith is a Python package aimed at making the analysis of satellite remote sensing data products easier.
 
 ### Installing RasterSmith
-Currently, RasterSmith is under active development but is packaged and avialalbe to install via `pip`. To install the package, you can use pip  install for your Python environment:
+Currently, RasterSmith is under active development but is packaged and available to install via `pip`. To install the package, you can use pip  install for your Python environment:
 
 ```
 pip install rastersmith
@@ -67,7 +67,7 @@ Attributes:
     resolution:    500
 ```
 
-As we can see from the data structure, the  viirs variable is an xarray DataArray object with five dimensions which are labeled as `lat`, `lon`, `z`, `band`, and `time`. RasterSmith uses these five dimensions to account for the full dimensionality of all satellite data products (see [RasterSmith data structure](#rastersmith-data-structure) section for full details). Furthermore, we can see that there are coordinates associated with the labeled dimensions where we can use the internal xarray API for sub-sampling and manipulation. Lastly, we have common metadata properties provided as xarray attributes. For example, every satellite product has a projection String, or `projStr` (using the Proj4 sting representaion), to decribe the native coordinate system as well as extent, acquisition date, resolution, and scaling factors.
+As we can see from the data structure, the  viirs variable is an xarray DataArray object with five dimensions which are labeled as `lat`, `lon`, `z`, `band`, and `time`. RasterSmith uses these five dimensions to account for the full dimensionality of all satellite data products (see [RasterSmith data structure](#rastersmith-data-structure) section for full details). Furthermore, we can see that there are coordinates associated with the labeled dimensions where we can use the internal xarray API for sub-sampling and manipulation. Lastly, we have common metadata properties provided as xarray attributes. For example, every satellite product has a projection String, or `projStr` (using the Proj4 string representaion), to decribe the native coordinate system as well as extent, acquisition date, resolution, and scaling factors.
 
 Now, let's view and explore the imagery. We will use the xarray selection and plotting API to display and view particular bands (using the labeled band dimension). Here we are selecting the Near-Infrared channel (`M7`) and plotting it with the geographic coordinates:
 
@@ -115,7 +115,7 @@ Out[9] <matplotlib.collections.QuadMesh at 0xd37e52198>
 
 As we can see, when the mask is applied, all pixels in the `mask` band with a value of `0` will be given a `nan` value. This is beneficial when we want to start taking advantage of the multi-temporal acquisitions and make mosaics (using the `time` dimension).
 
-Here is an example to create an 8-day mean composite from multiple image acquisitions. We will write a separate script to use the RasterSmith package to read in a preprocess multiple VIIRS datasets and create an 8-day composite. We will call this script 'viirsComposity.py'.
+Here is an example to create an 8-day mean composite from multiple image acquisitions. We will write a separate script to use the RasterSmith package to read in a preprocess multiple VIIRS datasets and create an 8-day composite. We will call this script 'viirsComposite.py'.
 
 ```python
 import rastersmith as rs
