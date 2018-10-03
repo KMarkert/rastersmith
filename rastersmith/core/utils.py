@@ -51,7 +51,7 @@ def meters2dd(inPt,scale=30):
     xdd = scale / xfct
 
     # return list of converted resolution values
-    return [ydd,xdd]
+    return ydd
 
 def dd2meters(inPt,scale=0.1):
     """Function to convert decimal degrees to meters based on the approximation
@@ -92,7 +92,7 @@ def dd2meters(inPt,scale=0.1):
     x_meters = scale * xfct
 
     # return list of converted resolution values
-    return [y_meters,x_meters]
+    return y_meters
 
 def rasterExpression(expression,lookups,outBandName='bandMath',appendTo=None):
 

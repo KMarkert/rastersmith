@@ -42,21 +42,20 @@ class Grid(object):
         if '4326' in crs:
             midPoint = [bn.nanmean([self.north,self.south]),
                         bn.nanmean([self.east,self.west])]
-            ySpacing, xSpacing = utils.meters2dd(midPoint,resolution)
+            spacing = utils.meters2dd(midPoint,resolution)
 
         elif type(resolution) == list:
-            xSpacing = resolution[0]
-            ySpacing = resolution[1]
+            spacing = resolution[0]
 
         else:
-            ySpacing,xSpacing= resolution,resolution
+            spacing = resolution,resolution
 
-        self.lons = np.arange(self.west,self.east,xSpacing)
-        self.lats = np.arange(self.south,self.north,ySpacing)
+        self.lons = np.arange(self.west,self.east,spacing)
+        self.lats = np.arange(self.south,self.north,spacing)
 
         self.xx,self.yy = np.meshgrid(self.lons,self.lats)
 
-        self.nominalResolution = (xSpacing,ySpacing)
+        self.nominalResolution = (spacing)
         self.dims = self.xx.shape
 
         return
@@ -172,7 +171,7 @@ class Raster(object):
             nd = nd.transpose('lat','lon','z','band','time')
 
         if appendTo:
-            out = xr.concat([appendTo,nd],dim='nd')
+            out = xr.concat([appendTo,nd],dim='band')
         else:
             out = nd
 
