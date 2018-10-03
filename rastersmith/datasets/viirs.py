@@ -78,7 +78,10 @@ class Viirs(core.Raster):
 
         date = '{0}{1}{2}'.format(metadata['RangeBeginningDate'],metadata['RangeBeginningTime'],' UTC')
 
-        dt = datetime.datetime.strptime(date, '%Y-%m-%d %H:%M:%S.%f %Z')
+        try:
+            dt = datetime.datetime.strptime(date, '%Y-%m-%d %H:%M:%S.%f %Z')
+        except ValueError:
+            dt = datetime.datetime.strptime(date, '%Y-%m-%d%H:%M:%S.%f %Z')
 
         coords = {'z': range(dataarr.shape[2]),
                   'lat':lats[:,0],
@@ -88,8 +91,7 @@ class Viirs(core.Raster):
 
         dims = ('lat','lon','z','band','time')
 
-        attrs = {'nativeCrs':{'init':'epsg:6974'},
-                 'projStr': proj,
+        attrs = {'projStr': proj,
                  'bandNames':tuple(bandNames),
                  'extent':(west,south,east,north),
                  'date':dt,

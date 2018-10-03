@@ -87,12 +87,13 @@ class Atms(core.Raster):
 
         dims = ('lat','lon','z','band','time')
 
-        attrs = {'nativeCrs':nativeCrs,
-                 'projStr': projStr,
+        attrs = {'projStr': projStr,
                  'bandNames':tuple(bandNames),
                  'extent': bb,
                  'date':dt,
                  'units': 'brightness_temperature',
+                 'scale_factor': 1,
+                 'add_offset': 0,
                  'resolution':res
                  }
 

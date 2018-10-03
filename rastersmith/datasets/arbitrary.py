@@ -71,7 +71,7 @@ class Arbitrary(core.Raster):
 
             if time:
                 if type(time) == str:
-                    dt= datetime.datetime.strptime(time,'%Y-%m-d')
+                    dt= datetime.datetime.strptime(time,'%Y-%m-%d')
                 elif type(time) == datetime.datetime:
                     dt = time
                 else:

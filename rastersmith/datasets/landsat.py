@@ -1,5 +1,6 @@
 from __future__ import division, print_function
 
+import os
 import datetime
 import numpy as np
 from osgeo import gdal
@@ -24,7 +25,7 @@ class Landsat(core.Raster):
 
         metadata = cls._parseMetadata(metaFile)
 
-        path = '/'.join(metaFile.split('/')[0:-1])+'/'
+        path = os.path.split(metaFile)[0]+'/'
 
         north = max(float(metadata['CORNER_UR_PROJECTION_Y_PRODUCT']),
                     float(metadata['CORNER_UL_PROJECTION_Y_PRODUCT']))
@@ -36,13 +37,6 @@ class Landsat(core.Raster):
                     float(metadata['CORNER_LL_PROJECTION_X_PRODUCT']))
 
         extent = (west,south,east,north)
-
-        xx,yy = [],[]
-        for c in ['LL','UL','UR','LR']:
-            xx.append(float(metadata['CORNER_{}_LON_PRODUCT'.format(c)]))
-            yy.append(float(metadata['CORNER_{}_LAT_PRODUCT'.format(c)]))
-
-        linRing =  list(zip(*[yy,xx]))
 
         projStr = '+proj=utm +zone={} +north +ellps=WGS84 +datum=WGS84 +units=m +no_defs'\
                     .format(metadata['UTM_ZONE'])
@@ -87,8 +81,7 @@ class Landsat(core.Raster):
 
         dims = ('lat','lon','z','band','time')
 
-        attrs = {'nativeCrs':{'init':'epsg:6974'},
-                 'projStr': projStr,
+        attrs = {'projStr': projStr,
                  'bandNames':tuple(bandNames),
                  'extent':(west,south,east,north),
                  'date':dt,
